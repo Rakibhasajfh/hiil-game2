@@ -1,0 +1,193 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Hill Climb v17 Fixed</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: url('https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?fit=crop&w=1600&q=80') no-repeat center center fixed;
+      background-size: cover;
+      font-family: sans-serif;
+    }
+    canvas { display: block; margin: auto; background: transparent; }
+    #hud {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.6); color: white;
+      padding: 8px 14px; border-radius: 10px; font-size: 16px;
+    }
+    #controls {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    }
+    .btn {
+      font-size: 20px; padding: 10px 16px; margin: 0 10px;
+      background: #333; color: white; border: none;
+      border-radius: 10px;
+    }
+    #soundToggle {
+      position: absolute; top: 10px; right: 10px;
+      background: #222; color: white; border: none;
+      padding: 8px 14px; font-size: 16px; border-radius: 10px;
+    }
+  </style>
+</head>
+<body onload="startGame()">
+<canvas id="game" width="800" height="500"></canvas>
+<div id="hud">
+  🪙 Total: <span id="total">0</span> |
+  🔻 Speed: <span id="speed">0</span> km/h<br>
+  🪙 Coins: <span id="coins">0</span> |
+  ⛽ Fuel: <span id="fuel">100</span> |
+  📏 Distance: <span id="dist">0</span>m
+</div>
+<div id="controls">
+  <button class="btn" onmousedown="keys['ArrowLeft'] = true" onmouseup="keys['ArrowLeft'] = false">◀️</button>
+  <button class="btn" onmousedown="keys['ArrowRight'] = true" onmouseup="keys['ArrowRight'] = false">▶️</button>
+  <button class="btn" onclick="boost()">⚡</button>
+</div>
+<button id="soundToggle" onclick="toggleSound()">🔊</button>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let car = { x: 50, y: 300, vx: 0, vy: 0, width: 40, height: 20 };
+let coins = 0, totalCoins = parseInt(localStorage.getItem('totalCoins') || '0'), fuel = 100, fuelMax = 100, boostPower = 3, distance = 0;
+let keys = {}, soundOn = true;
+let coinList = [], lastCoinX = 0;
+let fuelList = [], lastFuelX = 0;
+
+function getGroundHeight(x) {
+  return 350 + Math.sin(x * 0.01) * 20 + Math.cos(x * 0.003) * 10;
+}
+
+function playSound(type) {
+  if (!soundOn) return;
+  const src = type === 'coin'
+    ? 'https://cdn.pixabay.com/download/audio/2021/09/16/audio_48e166709c.mp3?filename=coin-collect-45655.mp3'
+    : 'https://cdn.pixabay.com/download/audio/2021/09/08/audio_5791ec6e2b.mp3?filename=boost-6089.mp3';
+  new Audio(src).play();
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  document.getElementById("soundToggle").textContent = soundOn ? "🔊" : "🔇";
+}
+
+function boost() {
+  if (fuel >= 10) {
+    car.vx += boostPower;
+    fuel -= 10;
+    playSound("boost");
+  }
+}
+
+function spawnCoins() {
+  if (car.x > lastCoinX - 500) {
+    for (let i = 0; i < 10; i++) {
+      const cx = lastCoinX + i * 250 + 250;
+      coinList.push({ x: cx, y: getGroundHeight(cx) - 30 });
+    }
+    lastCoinX += 2500;
+  }
+}
+
+function spawnFuel() {
+  if (car.x > lastFuelX - 800) {
+    for (let i = 0; i < 2; i++) {
+      const fx = lastFuelX + i * 1000 + 1000;
+      fuelList.push({ x: fx, y: getGroundHeight(fx) - 20 });
+    }
+    lastFuelX += 2000;
+  }
+}
+
+function startGame() {
+  requestAnimationFrame(draw);
+}
+
+function draw() {
+  spawnCoins();
+  spawnFuel();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  let camX = car.x - 100;
+
+  ctx.beginPath();
+  ctx.moveTo(0, 500);
+  for (let x = 0; x < canvas.width; x++) {
+    ctx.lineTo(x, getGroundHeight(camX + x));
+  }
+  ctx.lineTo(canvas.width, 500); ctx.closePath();
+  ctx.fillStyle = "#654321";
+  ctx.fill();
+
+  if (keys["ArrowRight"] && fuel > 0) {
+    car.vx += 0.05;
+    fuel -= 0.1;
+  }
+  if (keys["ArrowLeft"]) car.vx -= 0.03;
+
+  car.vy += 0.5;
+  car.x += car.vx;
+  car.y += car.vy;
+  distance = Math.floor(car.x / 10);
+
+  if (car.vx > 7.5) car.vx = 7.5;
+  if (car.vx < -2) car.vx = -2;
+
+  const groundY = getGroundHeight(car.x);
+  if (car.y + car.height > groundY) {
+    car.y = groundY - car.height;
+    car.vy = 0;
+  }
+
+  ctx.fillStyle = "red";
+  ctx.fillRect(car.x - camX, car.y, car.width, car.height);
+
+  // Coins
+  ctx.fillStyle = "gold";
+  for (let i = coinList.length - 1; i >= 0; i--) {
+    const c = coinList[i];
+    if (Math.abs(car.x - c.x) < 20 && Math.abs(car.y - c.y) < 20) {
+      coinList.splice(i, 1);
+      coins++;
+      
+      playSound("coin");
+      totalCoins++;
+      localStorage.setItem("totalCoins", totalCoins);
+
+    } else {
+      ctx.beginPath(); ctx.arc(c.x - camX, c.y, 6, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // Fuel
+  ctx.fillStyle = "lime";
+  for (let i = fuelList.length - 1; i >= 0; i--) {
+    const f = fuelList[i];
+    if (Math.abs(car.x - f.x) < 20 && Math.abs(car.y - f.y) < 20) {
+      fuelList.splice(i, 1);
+      fuel += 30;
+      if (fuel > fuelMax) fuel = fuelMax;
+    } else {
+      ctx.beginPath(); ctx.arc(f.x - camX, f.y, 8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  document.getElementById("coins").textContent = coins;
+  document.getElementById("fuel").textContent = Math.floor(fuel);
+  document.getElementById("dist").textContent = distance;
+  document.getElementById("total").textContent = totalCoins;
+  document.getElementById("speed").textContent = Math.round(Math.abs(car.vx) * 20);
+
+  if (fuel <= 0) {
+    alert("⛽ Fuel finished!");
+    location.reload(); return;
+  }
+
+  requestAnimationFrame(draw);
+}
+</script>
+</body>
+</html>
